@@ -123,10 +123,27 @@ class TestClaudeUI:
     def test_thinking_truncation(self):
         """Long thinking text is truncated."""
         ui, console = self._make_ui()
-        long_text = "x" * 200
+        long_text = "x" * 600
         ui.thinking(long_text)
         output = console.file.getvalue()
         assert "..." in output
+
+    def test_thinking_block_shows_full_block(self):
+        ui, console = self._make_ui()
+        ui.thinking_block("First paragraph.\n\nSecond paragraph.")
+        out = console.file.getvalue()
+        assert "First paragraph" in out
+        assert "Second paragraph" in out
+
+    def test_thinking_block_skipped_non_verbose(self):
+        ui, console = self._make_ui(verbose=False)
+        ui.thinking_block("Hidden block text")
+        assert console.file.getvalue().strip() == ""
+
+    def test_thinking_block_short_skipped(self):
+        ui, console = self._make_ui()
+        ui.thinking_block("x")
+        assert console.file.getvalue().strip() == ""
 
     def test_progress(self):
         """Progress displays message."""
@@ -242,8 +259,33 @@ class TestSummarizeInput:
         result = ui._summarize_input("UnknownTool", {})
         assert result == ""
 
+    def test_mcp_tool_url(self):
+        ui = self._make_ui()
+        r = ui._summarize_input("mcp_playwright_navigate", {"url": "https://example.com/y"})
+        assert "url" in r
+        assert "example.com" in r
 
-class TestTruncatePath:
+    def test_todo_write_summary(self):
+        ui = self._make_ui()
+        r = ui._summarize_input("TodoWrite", {"todos": [{"content": "a", "status": "pending"}]})
+        assert "1 item" in r
+
+
+class TestTodoUpdated:
+    def test_todo_updated_lists(self):
+        console = Console(file=StringIO(), no_color=True)
+        ui = ClaudeUI(verbose=True)
+        ui.console = console
+        ui.todo_updated(
+            [
+                {"content": "First", "status": "completed"},
+                {"content": "Second", "status": "in_progress"},
+            ]
+        )
+        out = console.file.getvalue()
+        assert "todos" in out
+        assert "First" in out
+        assert "Second" in out
     """Test _truncate_path method."""
 
     def test_short_path(self):

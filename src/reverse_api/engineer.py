@@ -210,6 +210,9 @@ def run_reverse_engineering(
     opencode_provider: str | None = None,
     opencode_model: str | None = None,
     copilot_model: str | None = None,
+    cursor_model: str | None = None,
+    cursor_web_search: bool = True,
+    cursor_setting_sources: list[str] | None = None,
     enable_sync: bool = False,
     is_fresh: bool = False,
     output_language: str = "python",
@@ -219,10 +222,13 @@ def run_reverse_engineering(
     """Run reverse engineering with the specified SDK.
 
     Args:
-        sdk: "claude", "opencode", or "copilot" - determines which SDK to use
+        sdk: "claude", "opencode", "copilot", or "cursor" - determines which SDK to use
         opencode_provider: Provider ID for OpenCode (e.g., "anthropic")
         opencode_model: Model ID for OpenCode (e.g., "claude-sonnet-4-6")
         copilot_model: Model ID for Copilot (e.g., "gpt-5")
+        cursor_model: Model id for Cursor SDK (e.g., "composer-2")
+        cursor_web_search: When True, load extra Cursor setting layers so WebFetch/WebSearch and plugins apply.
+        cursor_setting_sources: Optional explicit list (overrides cursor_web_search), e.g. ["project","user","all"].
         enable_sync: Enable real-time file syncing during engineering
         is_fresh: Whether to start fresh (ignore previous scripts)
         output_language: Target language - "python", "javascript", or "typescript"
@@ -246,6 +252,27 @@ def run_reverse_engineering(
             is_fresh=is_fresh,
             output_language=output_language,
             output_mode=output_mode,
+            interactive=interactive,
+        )
+    elif sdk == "cursor":
+        from .cursor_engineer import CursorEngineer
+
+        engineer = CursorEngineer(
+            run_id=run_id,
+            har_path=har_path,
+            prompt=prompt,
+            model=model,
+            additional_instructions=additional_instructions,
+            output_dir=output_dir,
+            verbose=verbose,
+            enable_sync=enable_sync,
+            sdk=sdk,
+            is_fresh=is_fresh,
+            output_language=output_language,
+            output_mode=output_mode,
+            cursor_model=cursor_model,
+            cursor_web_search=cursor_web_search,
+            cursor_setting_sources=cursor_setting_sources,
             interactive=interactive,
         )
     elif sdk == "copilot":
