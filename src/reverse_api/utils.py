@@ -40,7 +40,7 @@ def generate_folder_name(prompt: str, sdk: str = None, session_id: str = None) -
 
     Args:
         prompt: The task prompt to generate a folder name for
-        sdk: The SDK to use ("opencode", "claude", or "cursor"). If None, checks config.
+        sdk: The SDK to use ("opencode", "claude", "copilot", or "cursor"). If None, checks config.
         session_id: Optional OpenCode session ID to reuse. Only used when sdk="opencode".
     """
     from rich.console import Console
