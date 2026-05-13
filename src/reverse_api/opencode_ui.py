@@ -354,7 +354,7 @@ class OpenCodeUI:
             if isinstance(mn, str) and mn:
                 return f"[dim]{mn[:70]}{'…' if len(mn) > 70 else ''}[/dim]"
             return ""
-        if tool_lower.startswith("mcp_") or tool_lower.startswith("mcp"):
+        if tool_lower.startswith("mcp"):
             keys = ("url", "path", "file_path", "command", "query", "pattern", "browserTab", "tabId", "text")
             for k in keys:
                 v = tool_input.get(k)

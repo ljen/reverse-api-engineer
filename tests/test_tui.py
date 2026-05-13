@@ -261,9 +261,9 @@ class TestSummarizeInput:
 
     def test_mcp_tool_url(self):
         ui = self._make_ui()
-        r = ui._summarize_input("mcp_playwright_navigate", {"url": "https://x.com/y"})
+        r = ui._summarize_input("mcp_playwright_navigate", {"url": "https://example.com/y"})
         assert "url" in r
-        assert "x.com" in r
+        assert "example.com" in r
 
     def test_todo_write_summary(self):
         ui = self._make_ui()

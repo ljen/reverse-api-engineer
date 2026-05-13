@@ -90,19 +90,17 @@ const usageAgg = {
 /** @type {import("@cursor/sdk").SDKAgent | null} */
 let agent = null;
 try {
+  const agentOpts = {
+    apiKey,
+    model: { id: modelId },
+    local: { cwd, settingSources },
+    ...(mcpServers ? { mcpServers } : {}),
+  };
+
   if (resumeAgentId) {
-    agent = await Agent.resume(resumeAgentId, {
-      apiKey,
-      model: { id: modelId },
-      local: { cwd, settingSources },
-    });
+    agent = await Agent.resume(resumeAgentId, agentOpts);
   } else {
-    agent = await Agent.create({
-      apiKey,
-      model: { id: modelId },
-      local: { cwd, settingSources },
-      mcpServers,
-    });
+    agent = await Agent.create(agentOpts);
   }
 
   emit({ type: "agent", agentId: agent.agentId });

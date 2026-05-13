@@ -67,12 +67,13 @@ def generate_folder_name(prompt: str, sdk: str = None, session_id: str = None) -
             # Already in async context, use fallback to avoid nested asyncio.run
             return _slugify(prompt)
 
+        if sdk == "cursor":
+            return _slugify(prompt)
+
         console = Console()
         with Status(" [dim]generating folder name...[/dim]", console=console, spinner="dots", spinner_style="dim"):
             if sdk == "opencode":
                 return asyncio.run(_generate_folder_name_opencode_async(prompt, session_id))
-            if sdk == "cursor":
-                return _slugify(prompt)
             return asyncio.run(_generate_folder_name_async(prompt))
     except Exception:
         pass

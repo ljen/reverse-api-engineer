@@ -1816,7 +1816,7 @@ def run_auto_capture(
                 output_language=output_language,
                 interactive=interactive,
                 headless=headless,
-                cursor_model=config_manager.get("cursor_model", "composer-2"),
+                cursor_model=model or config_manager.get("cursor_model", "composer-2"),
                 cursor_web_search=bool(config_manager.get("cursor_web_search", True)),
                 cursor_setting_sources=_cursor_src,
             )
@@ -2084,14 +2084,15 @@ def run_engineer(
     elif sdk == "cursor":
         _cs = config_manager.get("cursor_setting_sources")
         _cursor_src = _cs if isinstance(_cs, list) and all(isinstance(x, str) for x in _cs) else None
+        _cm = model or config_manager.get("cursor_model", "composer-2")
         result = run_reverse_engineering(
             run_id=run_id,
             har_path=har_path,
             prompt=prompt,
-            model=None,
+            model=_cm,
             output_dir=output_dir,
             sdk=sdk,
-            cursor_model=config_manager.get("cursor_model", "composer-2"),
+            cursor_model=_cm,
             cursor_web_search=bool(config_manager.get("cursor_web_search", True)),
             cursor_setting_sources=_cursor_src,
             enable_sync=enable_sync,

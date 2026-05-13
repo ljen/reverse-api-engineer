@@ -271,7 +271,7 @@ class ClaudeUI:
             if isinstance(mn, str) and mn:
                 return f"[dim]{mn[:70]}{'…' if len(mn) > 70 else ''}[/dim]"
             return ""
-        if tl.startswith("mcp_") or tl.startswith("mcp"):
+        if tl.startswith("mcp"):
             keys = ("url", "path", "file_path", "command", "query", "pattern", "browserTab", "tabId", "text")
             for k in keys:
                 v = tool_input.get(k)
