@@ -255,25 +255,6 @@ def _build_dry_run_payload(
             "status": "error",
             "message": f"unknown sdk {sdk!r}; expected 'claude', 'opencode', 'copilot', or 'cursor'",
         })
-    elif sdk == "cursor":
-        from .cursor_auth import get_cursor_api_key
-
-        if get_cursor_api_key():
-            checks.append({
-                "name": f"sdk:{sdk}",
-                "status": "ok",
-                "message": "Cursor API key present (CURSOR_API_KEY or CURSOR_API_KEY_FILE)",
-            })
-        else:
-            checks.append({
-                "name": f"sdk:{sdk}",
-                "status": "warn",
-                "message": (
-                    "CURSOR_API_KEY not in process environment and CURSOR_API_KEY_FILE "
-                    "unset/invalid (use `export CURSOR_API_KEY=...` so Python can see it, "
-                    "or set CURSOR_API_KEY_FILE to a file containing the key)"
-                ),
-            })
     elif not os.environ.get(sdk_env_var):
         checks.append({
             "name": f"sdk:{sdk}",
