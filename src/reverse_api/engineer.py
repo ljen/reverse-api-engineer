@@ -211,6 +211,8 @@ def run_reverse_engineering(
     opencode_model: str | None = None,
     copilot_model: str | None = None,
     cursor_model: str | None = None,
+    cursor_web_search: bool = True,
+    cursor_setting_sources: list[str] | None = None,
     enable_sync: bool = False,
     is_fresh: bool = False,
     output_language: str = "python",
@@ -225,6 +227,8 @@ def run_reverse_engineering(
         opencode_model: Model ID for OpenCode (e.g., "claude-sonnet-4-6")
         copilot_model: Model ID for Copilot (e.g., "gpt-5")
         cursor_model: Model id for Cursor SDK (e.g., "composer-2")
+        cursor_web_search: When True, load extra Cursor setting layers so WebFetch/WebSearch and plugins apply.
+        cursor_setting_sources: Optional explicit list (overrides cursor_web_search), e.g. ["project","user","all"].
         enable_sync: Enable real-time file syncing during engineering
         is_fresh: Whether to start fresh (ignore previous scripts)
         output_language: Target language - "python", "javascript", or "typescript"
@@ -267,6 +271,8 @@ def run_reverse_engineering(
             output_language=output_language,
             output_mode=output_mode,
             cursor_model=cursor_model,
+            cursor_web_search=cursor_web_search,
+            cursor_setting_sources=cursor_setting_sources,
             interactive=interactive,
         )
     elif sdk == "copilot":

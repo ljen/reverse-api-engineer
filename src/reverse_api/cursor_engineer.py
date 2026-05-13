@@ -69,15 +69,40 @@ class CursorEngineer(BaseEngineer):
         prompt: str,
         model: str | None = None,
         cursor_model: str | None = None,
+        cursor_web_search: bool = True,
+        cursor_setting_sources: list[str] | None = None,
         **kwargs: Any,
     ):
         cm = cursor_model or model or "composer-2"
         super().__init__(run_id=run_id, har_path=har_path, prompt=prompt, model=cm, **kwargs)
         self.cursor_model = cm
+        self.cursor_web_search = cursor_web_search
+        self.cursor_setting_sources = cursor_setting_sources
         vb = self.ui.verbose
         self.ui = CursorStreamUI(self, verbose=vb)
         self._cursor_thinking_acc = ""
         self._cursor_assistant_acc = ""
+
+    @staticmethod
+    def _cursor_coerce_args(raw: Any) -> dict[str, Any]:
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str) and raw.strip().startswith("{"):
+            try:
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, dict) else {}
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
+    def _cursor_emit_todo_ui(self, name: str, args: dict[str, Any]) -> None:
+        if "todo" not in name.lower():
+            return
+        todos = args.get("todos")
+        if not isinstance(todos, list) or not todos:
+            return
+        self.ui.todo_updated(todos)
+        self.message_store.save_todos(todos)
 
     def _workspace_cwd(self) -> str:
         return str(self.scripts_dir.parent.parent)
@@ -138,7 +163,8 @@ class CursorEngineer(BaseEngineer):
             status = event.get("status")
             if status == "running":
                 self._cursor_flush_narrative()
-                args = event.get("args") if isinstance(event.get("args"), dict) else {}
+                args = self._cursor_coerce_args(event.get("args"))
+                self._cursor_emit_todo_ui(name, args)
                 self.ui.tool_start(name, args)
                 self.message_store.save_tool_start(name, args)
             else:
@@ -148,7 +174,7 @@ class CursorEngineer(BaseEngineer):
                 self.ui.tool_result(name, is_err, out)
                 self.message_store.save_tool_result(name, is_err, out)
 
-    async def _one_turn(
+    async def _one_turn(  # noqa: C901 - subprocess + NDJSON; splitting obscures control flow
         self,
         prompt: str,
         *,
@@ -167,6 +193,10 @@ class CursorEngineer(BaseEngineer):
             req["mcpServers"] = mcp_servers
         if resume_agent_id:
             req["resumeAgentId"] = resume_agent_id
+        if isinstance(self.cursor_setting_sources, list) and self.cursor_setting_sources:
+            req["settingSources"] = [str(x) for x in self.cursor_setting_sources]
+        else:
+            req["cursorWebSearch"] = bool(self.cursor_web_search)
 
         pre = _ensure_cursor_bridge_deps()
         if pre:
@@ -214,7 +244,7 @@ class CursorEngineer(BaseEngineer):
             while True:
                 try:
                     line_b = await asyncio.wait_for(proc.stdout.readline(), timeout=900.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     ret = {"error": "cursor bridge: no stdout for 15 minutes (timed out)"}
                     break
                 if not line_b:
@@ -270,11 +300,11 @@ class CursorEngineer(BaseEngineer):
         finally:
             try:
                 await asyncio.wait_for(proc.wait(), timeout=120.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 try:
                     proc.terminate()
                     await asyncio.wait_for(proc.wait(), timeout=15.0)
-                except (ProcessLookupError, asyncio.TimeoutError):
+                except (ProcessLookupError, TimeoutError):
                     try:
                         proc.kill()
                     except ProcessLookupError:

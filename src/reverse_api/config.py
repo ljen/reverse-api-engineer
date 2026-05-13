@@ -9,6 +9,11 @@ DEFAULT_CONFIG = {
     "claude_code_model": "claude-sonnet-4-6",
     "collector_model": "claude-sonnet-4-6",  # Model for collector mode
     "cursor_model": "composer-2",  # Model id for Cursor SDK (see Cursor.models.list())
+    # When True, local agents load broader Cursor setting layers (plugins/team) so WebFetch/WebSearch
+    # and other IDE tools match Cursor desktop behavior. Set False for minimal "project+user" only.
+    "cursor_web_search": True,
+    # Optional override: list of setting source ids, e.g. ["project","user","all"]. None uses cursor_web_search.
+    "cursor_setting_sources": None,
     "copilot_model": "gpt-5",  # Model for Copilot SDK sessions
     "opencode_model": "claude-opus-4-6",
     "opencode_provider": "anthropic",

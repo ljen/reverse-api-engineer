@@ -73,6 +73,13 @@ if (!prompt || typeof prompt !== "string") {
   process.exit(1);
 }
 
+const settingSources =
+  Array.isArray(input.settingSources) && input.settingSources.length > 0
+    ? input.settingSources
+    : input.cursorWebSearch === false
+      ? ["project", "user"]
+      : ["project", "user", "plugins", "team"];
+
 const usageAgg = {
   input_tokens: 0,
   output_tokens: 0,
@@ -87,13 +94,13 @@ try {
     agent = await Agent.resume(resumeAgentId, {
       apiKey,
       model: { id: modelId },
-      local: { cwd },
+      local: { cwd, settingSources },
     });
   } else {
     agent = await Agent.create({
       apiKey,
       model: { id: modelId },
-      local: { cwd },
+      local: { cwd, settingSources },
       mcpServers,
     });
   }

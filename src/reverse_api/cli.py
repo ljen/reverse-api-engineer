@@ -928,6 +928,7 @@ def handle_settings(mode_color=THEME_PRIMARY):
         Choice(title="Claude Code Model", value="claude_code_model"),
         Choice(title="Copilot Model", value="copilot_model"),
         Choice(title="Cursor Model", value="cursor_model"),
+        Choice(title="Cursor Web Search", value="cursor_web_search"),
         Choice(title="OpenCode Model", value="opencode_model"),
         Choice(title="OpenCode Provider", value="opencode_provider"),
         Choice(title="Output Directory", value="output_dir"),
@@ -1120,6 +1121,27 @@ def handle_settings(mode_color=THEME_PRIMARY):
             else:
                 config_manager.set("cursor_model", new_model)
                 console.print(f" [dim]updated[/dim] cursor model: {new_model}\n")
+
+    elif action == "cursor_web_search":
+        pick = questionary.select(
+            "",
+            choices=[
+                Choice(title="On — WebFetch/WebSearch + plugins/team settings", value=True),
+                Choice(title="Off — project + user Cursor settings only", value=False),
+                Choice(title="back", value="back"),
+            ],
+            pointer=">",
+            qmark="",
+            style=questionary.Style(
+                [
+                    ("pointer", f"fg:{mode_color} bold"),
+                    ("highlighted", f"fg:{mode_color} bold"),
+                ]
+            ),
+        ).ask()
+        if pick is not None and pick != "back":
+            config_manager.set("cursor_web_search", pick)
+            console.print(f" [dim]updated[/dim] cursor web search: {'on' if pick else 'off'}\n")
 
     elif action == "opencode_model":
         current = config_manager.get("opencode_model", "claude-opus-4-6")
@@ -1782,6 +1804,8 @@ def run_auto_capture(
         elif sdk == "cursor":
             from .cursor_engineer import CursorAutoEngineer
 
+            _cs = config_manager.get("cursor_setting_sources")
+            _cursor_src = _cs if isinstance(_cs, list) and all(isinstance(x, str) for x in _cs) else None
             engineer = CursorAutoEngineer(
                 run_id=run_id,
                 prompt=prompt,
@@ -1793,6 +1817,8 @@ def run_auto_capture(
                 interactive=interactive,
                 headless=headless,
                 cursor_model=config_manager.get("cursor_model", "composer-2"),
+                cursor_web_search=bool(config_manager.get("cursor_web_search", True)),
+                cursor_setting_sources=_cursor_src,
             )
         else:
             from .auto_engineer import ClaudeAutoEngineer
@@ -2056,6 +2082,8 @@ def run_engineer(
             interactive=interactive,
         )
     elif sdk == "cursor":
+        _cs = config_manager.get("cursor_setting_sources")
+        _cursor_src = _cs if isinstance(_cs, list) and all(isinstance(x, str) for x in _cs) else None
         result = run_reverse_engineering(
             run_id=run_id,
             har_path=har_path,
@@ -2064,6 +2092,8 @@ def run_engineer(
             output_dir=output_dir,
             sdk=sdk,
             cursor_model=config_manager.get("cursor_model", "composer-2"),
+            cursor_web_search=bool(config_manager.get("cursor_web_search", True)),
+            cursor_setting_sources=_cursor_src,
             enable_sync=enable_sync,
             additional_instructions=additional_instructions,
             is_fresh=is_fresh,

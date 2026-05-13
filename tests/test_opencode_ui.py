@@ -335,11 +335,10 @@ class TestOpenCodeUI:
         assert "sync" in output
 
     def test_sync_flash(self):
-        """Sync flash displays."""
+        """Sync flash is intentionally silenced (too noisy during bulk sync)."""
         ui, console = self._make_ui()
         ui.sync_flash("Synced api_client.py")
-        output = console.file.getvalue()
-        assert "Synced" in output
+        assert console.file.getvalue() == ""
 
     def test_sync_error(self):
         """Sync error displays."""
@@ -451,7 +450,7 @@ class TestOpenCodeUISummarizeInput:
         """TodoWrite shows count."""
         ui = self._make_ui()
         result = ui._summarize_input("todowrite", {"todos": [1, 2, 3]})
-        assert "3 items" in result
+        assert "3 item(s)" in result
 
     def test_unknown_tool(self):
         """Unknown tool returns empty string."""

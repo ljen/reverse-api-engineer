@@ -259,8 +259,33 @@ class TestSummarizeInput:
         result = ui._summarize_input("UnknownTool", {})
         assert result == ""
 
+    def test_mcp_tool_url(self):
+        ui = self._make_ui()
+        r = ui._summarize_input("mcp_playwright_navigate", {"url": "https://x.com/y"})
+        assert "url" in r
+        assert "x.com" in r
 
-class TestTruncatePath:
+    def test_todo_write_summary(self):
+        ui = self._make_ui()
+        r = ui._summarize_input("TodoWrite", {"todos": [{"content": "a", "status": "pending"}]})
+        assert "1 item" in r
+
+
+class TestTodoUpdated:
+    def test_todo_updated_lists(self):
+        console = Console(file=StringIO(), no_color=True)
+        ui = ClaudeUI(verbose=True)
+        ui.console = console
+        ui.todo_updated(
+            [
+                {"content": "First", "status": "completed"},
+                {"content": "Second", "status": "in_progress"},
+            ]
+        )
+        out = console.file.getvalue()
+        assert "todos" in out
+        assert "First" in out
+        assert "Second" in out
     """Test _truncate_path method."""
 
     def test_short_path(self):
