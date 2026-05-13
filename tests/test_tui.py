@@ -123,10 +123,27 @@ class TestClaudeUI:
     def test_thinking_truncation(self):
         """Long thinking text is truncated."""
         ui, console = self._make_ui()
-        long_text = "x" * 200
+        long_text = "x" * 600
         ui.thinking(long_text)
         output = console.file.getvalue()
         assert "..." in output
+
+    def test_thinking_block_shows_full_block(self):
+        ui, console = self._make_ui()
+        ui.thinking_block("First paragraph.\n\nSecond paragraph.")
+        out = console.file.getvalue()
+        assert "First paragraph" in out
+        assert "Second paragraph" in out
+
+    def test_thinking_block_skipped_non_verbose(self):
+        ui, console = self._make_ui(verbose=False)
+        ui.thinking_block("Hidden block text")
+        assert console.file.getvalue().strip() == ""
+
+    def test_thinking_block_short_skipped(self):
+        ui, console = self._make_ui()
+        ui.thinking_block("x")
+        assert console.file.getvalue().strip() == ""
 
     def test_progress(self):
         """Progress displays message."""

@@ -1,6 +1,7 @@
 """Rich Terminal UI for Claude SDK interactions."""
 
 from rich.console import Console
+from rich.padding import Padding
 from rich.text import Text
 
 # Theme configuration
@@ -127,6 +128,23 @@ class ClaudeUI:
         if len(display_text) > max_length:
             display_text = display_text[:max_length] + "..."
         self.console.print(f"  [dim].. {display_text}[/dim]")
+
+    def thinking_block(self, text: str, max_chars: int = 8000) -> None:
+        """Print one cohesive model reasoning / reply block (not token-by-token).
+
+        Used by the Cursor SDK path where the bridge streams fine-grained deltas;
+        the engineer buffers those and flushes them here as a single visual unit.
+        """
+        if not self.verbose:
+            return
+        raw = (text or "").strip()
+        if len(raw) < 2:
+            return
+        if len(raw) > max_chars:
+            raw = raw[:max_chars] + "\n…"
+        self.console.print()
+        self.console.print(Padding(Text(raw, style="dim"), (0, 0, 0, 2)))
+        self.console.print()
 
     def progress(self, message: str) -> None:
         """Display a progress message."""

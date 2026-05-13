@@ -60,6 +60,8 @@ class CursorEngineer(BaseEngineer):
         cm = cursor_model or model or "composer-2"
         super().__init__(run_id=run_id, har_path=har_path, prompt=prompt, model=cm, **kwargs)
         self.cursor_model = cm
+        self._cursor_thinking_acc = ""
+        self._cursor_assistant_acc = ""
 
     def _workspace_cwd(self) -> str:
         return str(self.scripts_dir.parent.parent)
@@ -71,20 +73,55 @@ class CursorEngineer(BaseEngineer):
             if key in usage and isinstance(usage[key], (int, float)):
                 self.usage_metadata[key] = self.usage_metadata.get(key, 0) + int(usage[key])
 
+    def _cursor_reset_stream_buffers(self) -> None:
+        self._cursor_thinking_acc = ""
+        self._cursor_assistant_acc = ""
+
+    def _cursor_feed_thinking(self, fragment: str) -> None:
+        self._cursor_thinking_acc += fragment
+
+    def _cursor_feed_assistant(self, text: str) -> None:
+        """Merge assistant snapshots (Cursor often sends growing full-message text)."""
+        if not text:
+            return
+        old = self._cursor_assistant_acc
+        if not old.strip():
+            self._cursor_assistant_acc = text
+            return
+        if text.startswith(old):
+            self._cursor_assistant_acc = text
+            return
+        self._cursor_assistant_acc = old.rstrip() + "\n\n" + text.lstrip()
+
+    def _cursor_narrative_nonempty(self) -> bool:
+        return bool(self._cursor_thinking_acc.strip() or self._cursor_assistant_acc.strip())
+
+    def _cursor_flush_narrative(self) -> None:
+        """Emit accumulated model text as one UI block + one message_store entry."""
+        parts: list[str] = []
+        if self._cursor_thinking_acc.strip():
+            parts.append(self._cursor_thinking_acc.strip())
+        if self._cursor_assistant_acc.strip():
+            parts.append(self._cursor_assistant_acc.strip())
+        combined = "\n\n".join(parts)
+        if not combined:
+            return
+        self.ui.thinking_block(combined)
+        self.message_store.save_thinking(combined)
+        self._cursor_thinking_acc = ""
+        self._cursor_assistant_acc = ""
+
     async def _dispatch_stream_event(self, event: dict[str, Any]) -> None:
         et = event.get("type")
         if et == "thinking" and event.get("text"):
-            t = str(event["text"])
-            self.ui.thinking(t)
-            self.message_store.save_thinking(t)
+            self._cursor_feed_thinking(str(event["text"]))
         elif et == "assistant" and event.get("text"):
-            t = str(event["text"])
-            self.ui.thinking(t)
-            self.message_store.save_thinking(t)
+            self._cursor_feed_assistant(str(event["text"]))
         elif et == "tool_call":
             name = str(event.get("name") or "tool")
             status = event.get("status")
             if status == "running":
+                self._cursor_flush_narrative()
                 args = event.get("args") if isinstance(event.get("args"), dict) else {}
                 self.ui.tool_start(name, args)
                 self.message_store.save_tool_start(name, args)
@@ -123,6 +160,8 @@ class CursorEngineer(BaseEngineer):
         if not node_exe:
             return {"error": "node not found in PATH"}
 
+        self._cursor_reset_stream_buffers()
+
         proc = await asyncio.create_subprocess_exec(
             node_exe,
             str(_BRIDGE_SCRIPT),
@@ -138,7 +177,6 @@ class CursorEngineer(BaseEngineer):
             await proc.stdin.drain()
             proc.stdin.close()
 
-        assistant_chunks: list[str] = []
         assert proc.stdout is not None
         while True:
             line_b = await proc.stdout.readline()
@@ -155,8 +193,6 @@ class CursorEngineer(BaseEngineer):
             if t == "stream" and isinstance(obj.get("event"), dict):
                 ev = obj["event"]
                 await self._dispatch_stream_event(ev)
-                if ev.get("type") == "assistant" and ev.get("text"):
-                    assistant_chunks.append(str(ev["text"]))
             elif t == "agent":
                 pass
             elif t == "done":
@@ -165,9 +201,11 @@ class CursorEngineer(BaseEngineer):
                     await proc.wait()
                     return {"error": str(run_result.get("result") or "run error")}
                 self._merge_usage_from_bridge(obj.get("usage"))
+                had_narrative = self._cursor_narrative_nonempty()
+                self._cursor_flush_narrative()
                 rr = run_result.get("result")
-                if isinstance(rr, str) and rr.strip() and not assistant_chunks:
-                    self.ui.thinking(rr)
+                if isinstance(rr, str) and rr.strip() and not had_narrative:
+                    self.ui.thinking_block(rr)
                     self.message_store.save_thinking(rr)
                 code = await proc.wait()
                 stderr_b = await proc.stderr.read() if proc.stderr else b""

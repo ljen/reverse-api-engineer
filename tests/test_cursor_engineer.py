@@ -81,3 +81,27 @@ def test_ensure_bridge_missing_script(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr(ce, "_BRIDGE_SCRIPT", tmp_path / "nonexistent.mjs")
     err = _ensure_cursor_bridge_deps()
     assert err is not None
+
+
+def test_cursor_stream_buffers_merge_assistant(tmp_path: Path) -> None:
+    har = tmp_path / "recording.har"
+    har.write_text("{}")
+    with patch.dict("os.environ", {"CURSOR_API_KEY": "x"}):
+        with patch("reverse_api.cursor_engineer._ensure_cursor_bridge_deps", return_value=None):
+            eng = CursorEngineer(
+                run_id="r1",
+                har_path=har,
+                prompt="p",
+                cursor_model="composer-2",
+                sdk="cursor",
+                interactive=False,
+                verbose=False,
+                output_dir=str(tmp_path),
+            )
+    eng._cursor_reset_stream_buffers()
+    eng._cursor_feed_assistant("Hello")
+    eng._cursor_feed_assistant("Hello world")
+    assert eng._cursor_assistant_acc == "Hello world"
+    eng._cursor_feed_thinking(" t1")
+    eng._cursor_feed_thinking(" t2")
+    assert eng._cursor_thinking_acc == " t1 t2"
