@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from reverse_api.cursor_engineer import CursorEngineer, _ensure_cursor_bridge_deps
+from reverse_api.cursor_engineer import CursorEngineer, CursorStreamUI, _ensure_cursor_bridge_deps
 
 
 @pytest.fixture
@@ -71,8 +71,26 @@ async def test_cursor_engineer_success_non_interactive(har_path: Path) -> None:
                 with patch.object(eng.ui, "success", MagicMock()):
                     with patch.object(eng.ui.console, "print", MagicMock()):
                         out = await eng.analyze_and_generate()
-    assert out is not None
+            assert out is not None
     assert out.get("script_path", "").endswith("api_client.py")
+    assert isinstance(eng.ui, CursorStreamUI)
+
+
+def test_cursor_stream_ui_routes_thinking_to_buffer(har_path: Path) -> None:
+    with patch.dict("os.environ", {"CURSOR_API_KEY": "x"}):
+        with patch("reverse_api.cursor_engineer._ensure_cursor_bridge_deps", return_value=None):
+            eng = CursorEngineer(
+                run_id="r2",
+                har_path=har_path,
+                prompt="p",
+                sdk="cursor",
+                interactive=False,
+                verbose=True,
+            )
+    eng._cursor_reset_stream_buffers()
+    eng.ui.thinking("alpha")
+    eng.ui.thinking("beta")
+    assert eng._cursor_thinking_acc == "alphabeta"
 
 
 def test_ensure_bridge_missing_script(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,6 +119,10 @@ def test_cursor_stream_buffers_merge_assistant(tmp_path: Path) -> None:
     eng._cursor_reset_stream_buffers()
     eng._cursor_feed_assistant("Hello")
     eng._cursor_feed_assistant("Hello world")
+    assert eng._cursor_assistant_acc == "Hello world"
+    eng._cursor_reset_stream_buffers()
+    eng._cursor_feed_assistant("Hello")
+    eng._cursor_feed_assistant(" world")
     assert eng._cursor_assistant_acc == "Hello world"
     eng._cursor_feed_thinking(" t1")
     eng._cursor_feed_thinking(" t2")

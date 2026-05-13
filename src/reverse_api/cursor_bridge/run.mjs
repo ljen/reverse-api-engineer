@@ -16,6 +16,9 @@ function summarizeEvent(ev) {
     if (t === "thinking") {
       return { type: t, text: ev.text };
     }
+    if (t === "task" && ev.text) {
+      return { type: "thinking", text: String(ev.text) };
+    }
     if (t === "assistant") {
       const parts = [];
       for (const block of ev.message?.content || []) {
@@ -114,9 +117,31 @@ try {
 
   const run = await agent.send(prompt, sendOptions);
 
+  /** Coalesce rapid thinking deltas into one NDJSON line per segment (reduces UI spam). */
+  let thinkingBuf = "";
+  const flushThinking = () => {
+    const t = thinkingBuf.trim();
+    if (!t) return;
+    emit({ type: "stream", event: { type: "thinking", text: thinkingBuf } });
+    thinkingBuf = "";
+  };
+
   for await (const ev of run.stream()) {
+    if (ev.type === "thinking") {
+      thinkingBuf += ev.text ?? "";
+      continue;
+    }
+    flushThinking();
+    if (ev.type === "task" && ev.text) {
+      emit({
+        type: "stream",
+        event: { type: "thinking", text: String(ev.text) },
+      });
+      continue;
+    }
     emit({ type: "stream", event: summarizeEvent(ev) });
   }
+  flushThinking();
 
   const runResult = await run.wait();
   emit({

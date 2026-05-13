@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .base_engineer import BaseEngineer
+from .tui import ClaudeUI
 
 _BRIDGE_DIR = Path(__file__).resolve().parent / "cursor_bridge"
 _BRIDGE_SCRIPT = _BRIDGE_DIR / "run.mjs"
@@ -45,6 +46,19 @@ def _ensure_cursor_bridge_deps() -> str | None:
     return None
 
 
+class CursorStreamUI(ClaudeUI):
+    """Routes `.thinking()` into the Cursor buffer so nothing prints token-sized `..` lines."""
+
+    def __init__(self, engineer: CursorEngineer, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._eng = engineer
+
+    def thinking(self, text: str, max_length: int = 500) -> None:
+        _ = max_length
+        if text:
+            self._eng._cursor_feed_thinking(text)
+
+
 class CursorEngineer(BaseEngineer):
     """Reverse engineering using Cursor's TypeScript agent SDK (Node subprocess)."""
 
@@ -60,6 +74,8 @@ class CursorEngineer(BaseEngineer):
         cm = cursor_model or model or "composer-2"
         super().__init__(run_id=run_id, har_path=har_path, prompt=prompt, model=cm, **kwargs)
         self.cursor_model = cm
+        vb = self.ui.verbose
+        self.ui = CursorStreamUI(self, verbose=vb)
         self._cursor_thinking_acc = ""
         self._cursor_assistant_acc = ""
 
@@ -91,7 +107,7 @@ class CursorEngineer(BaseEngineer):
         if text.startswith(old):
             self._cursor_assistant_acc = text
             return
-        self._cursor_assistant_acc = old.rstrip() + "\n\n" + text.lstrip()
+        self._cursor_assistant_acc = old + text
 
     def _cursor_narrative_nonempty(self) -> bool:
         return bool(self._cursor_thinking_acc.strip() or self._cursor_assistant_acc.strip())
@@ -112,7 +128,7 @@ class CursorEngineer(BaseEngineer):
         self._cursor_assistant_acc = ""
 
     async def _dispatch_stream_event(self, event: dict[str, Any]) -> None:
-        et = event.get("type")
+        et = str(event.get("type") or "").lower()
         if et == "thinking" and event.get("text"):
             self._cursor_feed_thinking(str(event["text"]))
         elif et == "assistant" and event.get("text"):
@@ -172,60 +188,120 @@ class CursorEngineer(BaseEngineer):
             env=os.environ.copy(),
         )
 
+        stderr_acc = bytearray()
+
+        async def _pump_stderr() -> None:
+            if proc.stderr is None:
+                return
+            try:
+                while True:
+                    chunk = await proc.stderr.read(65536)
+                    if not chunk:
+                        break
+                    stderr_acc.extend(chunk)
+            except Exception:
+                return
+
         if proc.stdin:
             proc.stdin.write(json.dumps(req).encode("utf-8"))
             await proc.stdin.drain()
             proc.stdin.close()
 
         assert proc.stdout is not None
-        while True:
-            line_b = await proc.stdout.readline()
-            if not line_b:
-                break
-            line = line_b.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            t = obj.get("type")
-            if t == "stream" and isinstance(obj.get("event"), dict):
-                ev = obj["event"]
-                await self._dispatch_stream_event(ev)
-            elif t == "agent":
-                pass
-            elif t == "done":
-                run_result = obj.get("runResult") or {}
-                if run_result.get("status") == "error":
-                    await proc.wait()
-                    return {"error": str(run_result.get("result") or "run error")}
-                self._merge_usage_from_bridge(obj.get("usage"))
-                had_narrative = self._cursor_narrative_nonempty()
-                self._cursor_flush_narrative()
-                rr = run_result.get("result")
-                if isinstance(rr, str) and rr.strip() and not had_narrative:
-                    self.ui.thinking_block(rr)
-                    self.message_store.save_thinking(rr)
-                code = await proc.wait()
-                stderr_b = await proc.stderr.read() if proc.stderr else b""
-                if code != 0:
-                    err_t = stderr_b.decode("utf-8", errors="replace").strip()
-                    return {"error": err_t or f"cursor bridge exited {code}"}
-                return {"ok": True, "agentId": obj.get("agentId")}
-            elif t == "error":
-                msg = str(obj.get("message") or "bridge error")
-                if proc.stderr:
-                    extra = (await proc.stderr.read()).decode("utf-8", errors="replace").strip()
+        stderr_task = asyncio.create_task(_pump_stderr())
+        ret: dict[str, Any] | None = None
+        try:
+            while True:
+                try:
+                    line_b = await asyncio.wait_for(proc.stdout.readline(), timeout=900.0)
+                except asyncio.TimeoutError:
+                    ret = {"error": "cursor bridge: no stdout for 15 minutes (timed out)"}
+                    break
+                if not line_b:
+                    if ret is None:
+                        err_t = stderr_acc.decode("utf-8", errors="replace").strip()
+                        rc = proc.returncode
+                        if rc is None:
+                            try:
+                                await asyncio.wait_for(proc.wait(), timeout=5.0)
+                            except Exception:
+                                pass
+                            rc = proc.returncode
+                        ret = {"error": err_t or f"cursor bridge stdout closed (exit {rc})"}
+                    break
+                line = line_b.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = obj.get("type")
+                if t == "stream" and isinstance(obj.get("event"), dict):
+                    await self._dispatch_stream_event(obj["event"])
+                elif t == "agent":
+                    pass
+                elif t == "done":
+                    run_result = obj.get("runResult") or {}
+                    if run_result.get("status") == "error":
+                        ret = {"error": str(run_result.get("result") or "run error")}
+                        break
+                    self._merge_usage_from_bridge(obj.get("usage"))
+                    had_narrative = self._cursor_narrative_nonempty()
+                    self._cursor_flush_narrative()
+                    rr = run_result.get("result")
+                    if isinstance(rr, str) and rr.strip() and not had_narrative:
+                        self.ui.thinking_block(rr)
+                        self.message_store.save_thinking(rr)
+                    ret = {"ok": True, "agentId": obj.get("agentId")}
+                    break
+                elif t == "error":
+                    msg = str(obj.get("message") or "bridge error")
+                    extra = stderr_acc.decode("utf-8", errors="replace").strip()
                     if extra:
                         msg = f"{msg}\n{extra}"
-                await proc.wait()
-                return {"error": msg}
+                    ret = {"error": msg}
+                    break
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            if ret is None:
+                ret = {"error": str(e)}
+        finally:
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=120.0)
+            except asyncio.TimeoutError:
+                try:
+                    proc.terminate()
+                    await asyncio.wait_for(proc.wait(), timeout=15.0)
+                except (ProcessLookupError, asyncio.TimeoutError):
+                    try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        await proc.wait()
+                    except Exception:
+                        pass
+            try:
+                await asyncio.wait_for(stderr_task, timeout=10.0)
+            except Exception:
+                stderr_task.cancel()
+                try:
+                    await stderr_task
+                except asyncio.CancelledError:
+                    pass
 
-        stderr_b = await proc.stderr.read() if proc.stderr else b""
-        code = await proc.wait()
-        err_t = stderr_b.decode("utf-8", errors="replace").strip()
-        return {"error": err_t or f"empty bridge output (exit {code})"}
+        if ret is None:
+            err_t = stderr_acc.decode("utf-8", errors="replace").strip()
+            ret = {"error": err_t or "cursor bridge produced no result"}
+
+        if ret.get("ok"):
+            code = proc.returncode
+            if code not in (None, 0):
+                err_t = stderr_acc.decode("utf-8", errors="replace").strip()
+                return {"error": err_t or f"cursor bridge exited with code {code}"}
+        return ret
 
     async def analyze_and_generate(self) -> dict[str, Any] | None:
         self.ui.header(self.run_id, self.prompt, self.cursor_model, self.sdk, mode="engineer")
