@@ -705,7 +705,15 @@ def prompt_interactive_options(
         reverse_engineer = True
 
     if model is None:
-        model = config_manager.get("claude_code_model", "claude-sonnet-4-6")
+        _sdk = config_manager.get("sdk", "claude")
+        if _sdk == "opencode":
+            model = config_manager.get("opencode_model", "claude-opus-4-6")
+        elif _sdk == "copilot":
+            model = config_manager.get("copilot_model", "gpt-5")
+        elif _sdk == "cursor":
+            model = config_manager.get("cursor_model", "composer-2")
+        else:
+            model = config_manager.get("claude_code_model", "claude-sonnet-4-6")
 
     return {
         "mode": result_mode,
