@@ -33,6 +33,7 @@ dependencies = [
     "aiohttp>=3.13.4",
     "pygments>=2.20.0",
     "cryptography>=46.0.7",
+    "mcp[cli]>=1.26.0",
 ]
 
 [project.optional-dependencies]
@@ -50,6 +51,7 @@ Repository = "https://github.com/kalil0321/reverse-api-engineer"
 Issues = "https://github.com/kalil0321/reverse-api-engineer/issues"
 
 [project.scripts]
+reverse-api-mcp = "reverse_api.mcp_server:main"
 reverse-api-engineer = "reverse_api.cli:main"
 
 [build-system]
