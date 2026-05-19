@@ -7,7 +7,7 @@ def _init():
     return run_auto_capture, run_collector
 
 @mcp.tool()
-def capture_api(prompt: str, url: str = None) -> str:
+def capture_api(prompt: str, url: str | None = None) -> str:
     """Capture browser traffic and reverse engineer APIs autonomously.
 
     Args:
@@ -16,9 +16,11 @@ def capture_api(prompt: str, url: str = None) -> str:
     """
     run_auto_capture, _ = _init()
     result = run_auto_capture(prompt=prompt, url=url, headless=True)
-    if result:
+    if result and not result.get("error"):
         return f"Successfully generated API client at {result.get('script_path')}"
-    return "Failed to generate API client."
+
+    error_msg = result.get("error") if result else "Unknown error"
+    return f"Failed to generate API client: {error_msg}"
 
 @mcp.tool()
 def collect_data(prompt: str) -> str:
@@ -29,9 +31,11 @@ def collect_data(prompt: str) -> str:
     """
     _, run_collector = _init()
     result = run_collector(prompt=prompt)
-    if result:
+    if result and not result.get("error"):
         return f"Successfully collected data at {result.get('output_path')}"
-    return "Failed to collect data."
+
+    error_msg = result.get("error") if result else "Unknown error"
+    return f"Failed to collect data: {error_msg}"
 
 def main():
     mcp.run()
