@@ -1672,12 +1672,27 @@ def run_collector(prompt=None, model=None, output_dir=None):
                 usage=result.get("usage", {}),
                 paths={"output_path": result.get("output_path")},
             )
+
+        return {
+            "run_id": run_id,
+            "mode": "collector",
+            "output_path": (result or {}).get("output_path"),
+            "usage": (result or {}).get("usage", {}),
+            **({"error": result.get("error")} if result and result.get("error") else {}),
+        }
     except Exception as e:
         console.print(f" [red]collector error: {e}[/red]")
         console.print(f" [dim]{ERROR_CTA}[/dim]")
         import traceback
 
         traceback.print_exc()
+        return {
+            "run_id": run_id,
+            "mode": "collector",
+            "output_path": None,
+            "usage": {},
+            "error": str(e),
+        }
 
 
 def run_auto_capture(
