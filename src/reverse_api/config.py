@@ -8,13 +8,19 @@ DEFAULT_CONFIG = {
     "agent_provider": "auto",  # "auto" (Playwright MCP) or "chrome-mcp" (Chrome DevTools MCP)
     "claude_code_model": "claude-sonnet-4-6",
     "collector_model": "claude-sonnet-4-6",  # Model for collector mode
+    "cursor_model": "composer-2",  # Model id for Cursor SDK (see Cursor.models.list())
+    # When True, local agents load broader Cursor setting layers (plugins/team) so WebFetch/WebSearch
+    # and other IDE tools match Cursor desktop behavior. Set False for minimal "project+user" only.
+    "cursor_web_search": True,
+    # Optional override: list of setting source ids, e.g. ["project","user","all"]. None uses cursor_web_search.
+    "cursor_setting_sources": None,
     "copilot_model": "gpt-5",  # Model for Copilot SDK sessions
     "opencode_model": "claude-opus-4-6",
     "opencode_provider": "anthropic",
     "output_dir": None,  # None means use ~/.reverse-api/runs
     "output_language": "python",  # "python", "javascript", or "typescript"
     "real_time_sync": True,  # Enable real-time file sync during engineering
-    "sdk": "claude",  # "claude", "opencode", or "copilot"
+    "sdk": "claude",  # "claude", "opencode", "copilot", or "cursor"
 }
 
 

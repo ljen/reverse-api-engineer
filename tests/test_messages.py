@@ -119,6 +119,14 @@ class TestMessageStoreSaveHelpers:
         assert data["type"] == "thinking"
         assert "analyze" in data["content"]
 
+    def test_save_todos(self, tmp_path):
+        store, msg_path = self._make_store(tmp_path)
+        todos = [{"content": "a", "status": "pending"}]
+        store.save_todos(todos)
+        data = json.loads(msg_path.read_text().strip())
+        assert data["type"] == "todos"
+        assert data["content"] == todos
+
     def test_save_error(self, tmp_path):
         """save_error writes error type."""
         store, msg_path = self._make_store(tmp_path)

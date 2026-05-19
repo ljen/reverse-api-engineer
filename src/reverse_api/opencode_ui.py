@@ -1,5 +1,6 @@
 """OpenCode-specific Terminal UI with live streaming updates."""
 
+import json
 from typing import Any
 
 from rich.console import Console
@@ -125,9 +126,20 @@ class OpenCodeUI:
         self._tool_status = "running"
         self._tools_used.append(tool_name)
 
-        # Print tool start (this stays in terminal)
-        input_summary = self._summarize_input(tool_name, tool_input or {})
-        self.console.print(f"  [dim]>[/dim] {tool_name.lower():12} {input_summary}")
+        args = tool_input if isinstance(tool_input, dict) else {}
+        tl = (tool_name or "").lower()
+        icon = "◇" if tl.startswith("mcp") else ">"
+        header = tool_name or "tool"
+        if tl.startswith("mcp_"):
+            rest = tool_name[4:].replace("__", " · ").replace("_", " ")
+            header = rest[:56] + ("…" if len(rest) > 56 else "")
+        elif len(header) > 48:
+            header = header[:45] + "…"
+
+        input_summary = self._summarize_input(tool_name, args)
+        self.console.print(f"  [dim]{icon}[/dim] [white]{header}[/white]")
+        if input_summary:
+            self.console.print(f"      {input_summary}")
 
         if self._live:
             self._live.update(self._build_display())
@@ -249,34 +261,42 @@ class OpenCodeUI:
 
     def todo_updated(self, todos: list) -> None:
         """Display todo list updates."""
-        if not todos:
+        if not self.verbose or not todos:
             return
 
-        # Count by status
-        pending = sum(1 for t in todos if t.get("status") == "pending")
-        completed = sum(1 for t in todos if t.get("status") == "completed")
-        in_progress_todos = [t for t in todos if t.get("status") == "in_progress"]
+        icons = {
+            "pending": "○",
+            "in_progress": "›",
+            "completed": "✓",
+            "cancelled": "✗",
+        }
+        pending = sum(1 for t in todos if str(t.get("status", "")).lower() == "pending")
+        done = sum(1 for t in todos if str(t.get("status", "")).lower() == "completed")
+        active = [t for t in todos if str(t.get("status", "")).lower() == "in_progress"]
 
-        parts = []
-        if in_progress_todos:
-            parts.append(f"{len(in_progress_todos)} active")
+        summary_parts: list[str] = []
+        if active:
+            summary_parts.append(f"{len(active)} active")
         if pending:
-            parts.append(f"{pending} pending")
-        if completed:
-            parts.append(f"{completed} done")
+            summary_parts.append(f"{pending} pending")
+        if done:
+            summary_parts.append(f"{done} done")
+        summary = ", ".join(summary_parts) if summary_parts else f"{len(todos)} items"
 
-        status_str = ", ".join(parts) if parts else f"{len(todos)} items"
+        self.console.print(f"  [dim]todos[/dim] [white]{summary}[/white]")
+        for t in todos[:14]:
+            st = str(t.get("status", "pending")).lower()
+            ic = icons.get(st, "·")
+            line = (t.get("activeForm") or t.get("content") or "").strip() or "(empty)"
+            if len(line) > 76:
+                line = line[:73] + "..."
+            self.console.print(f"      [dim]{ic}[/dim]  {line}")
+        if len(todos) > 14:
+            self.console.print(f"      [dim]… {len(todos) - 14} more[/dim]")
+        self.console.print()
 
-        # Show current task if there is one in progress
-        if in_progress_todos:
-            current_task = in_progress_todos[0]
-            task_content = current_task.get("activeForm") or current_task.get("content", "")
-            # Truncate if too long
-            if len(task_content) > 50:
-                task_content = task_content[:47] + "..."
-            self.console.print(f"  [dim]tasks:[/dim] {status_str} [dim]→ {task_content}[/dim]")
-        else:
-            self.console.print(f"  [dim]tasks:[/dim] {status_str}")
+        if self._live:
+            self._live.update(self._build_display())
 
     def file_edited(self, file_path: str) -> None:
         """Display when a file is edited."""
@@ -324,6 +344,41 @@ class OpenCodeUI:
         """Create a brief summary of tool input."""
         tool_lower = tool_name.lower()
 
+        if tool_lower in ("todowrite", "todo_write", "write_todos", "update_todos"):
+            todos = tool_input.get("todos", [])
+            if isinstance(todos, list):
+                return f"[dim]{len(todos)} item(s)[/dim]"
+            return "[dim]todos[/dim]"
+        if tool_lower == "call_mcp_tool":
+            mn = tool_input.get("name") or tool_input.get("server") or tool_input.get("tool")
+            if isinstance(mn, str) and mn:
+                return f"[dim]{mn[:70]}{'…' if len(mn) > 70 else ''}[/dim]"
+            return ""
+        if tool_lower.startswith("mcp"):
+            keys = ("url", "path", "file_path", "command", "query", "pattern", "browserTab", "tabId", "text")
+            for k in keys:
+                v = tool_input.get(k)
+                if isinstance(v, str) and v.strip():
+                    vv = v.replace("\n", " ").strip()
+                    cap = 72 if k in ("url", "path", "file_path") else 60
+                    return f"[dim]{k}[/dim] [dim]{vv[:cap]}{'…' if len(vv) > cap else ''}[/dim]"
+            args = tool_input.get("arguments")
+            if isinstance(args, str) and args.strip().startswith("{"):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = None
+            if isinstance(args, dict):
+                for k in keys:
+                    v = args.get(k)
+                    if isinstance(v, str) and v.strip():
+                        vv = v.replace("\n", " ").strip()
+                        return f"[dim]{k}[/dim] [dim]{vv[:70]}{'…' if len(vv) > 70 else ''}[/dim]"
+            blob = json.dumps(tool_input, default=str)
+            if len(blob) > 90:
+                return f"[dim]{blob[:87]}…[/dim]"
+            return f"[dim]{blob}[/dim]"
+
         if tool_lower in ("read", "file_read"):
             path = tool_input.get("path", tool_input.get("file_path", ""))
             return f"[dim]{self._truncate_path(path)}[/dim]"
@@ -339,9 +394,9 @@ class OpenCodeUI:
         elif tool_lower in ("webfetch", "web_fetch"):
             url = str(tool_input.get("url", ""))[:50]
             return f"[dim]{url}{'...' if len(url) >= 50 else ''}[/dim]"
-        elif tool_lower == "todowrite":
-            todos = tool_input.get("todos", [])
-            return f"[dim]{len(todos)} items[/dim]"
+        elif tool_lower in ("websearch", "web_search"):
+            q = str(tool_input.get("query", ""))[:50]
+            return f"[dim]'{q}{'...' if len(q) >= 50 else ''}'[/dim]"
 
         return ""
 

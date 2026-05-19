@@ -49,6 +49,10 @@ class MessageStore:
         """Save Claude's thinking/response text."""
         self.append("thinking", text)
 
+    def save_todos(self, todos: list) -> None:
+        """Persist a todo list snapshot (e.g. Cursor / agent todo tools)."""
+        self.append("todos", todos)
+
     def save_error(self, error: str) -> None:
         """Save an error event."""
         self.append("error", error)
