@@ -1,6 +1,6 @@
 # Release Process
 
-This project uses a single source of truth for versioning: `pyproject.toml`.
+This project uses a single source of truth for versioning: `pyproject.toml`. The current declared version is `0.9.0`. Releases are manual; this checkout has no tracked CI publishing workflow. Publishing this fork to the existing PyPI project requires maintainer credentials and is separate from pushing documentation changes.
 
 ## How it works
 
@@ -17,33 +17,35 @@ This project uses a single source of truth for versioning: `pyproject.toml`.
 
 2. **Update CHANGELOG.md** with release notes
 
-3. **Run the clean build script**:
+3. **Validate and build** using the checks in [CONTRIBUTING.md](CONTRIBUTING.md), then:
    ```bash
-   ./scripts/clean_build.sh
+   uv lock
+   uv build
    ```
+   For an intentional clean rebuild, `./scripts/clean_build.sh` first deletes `dist/`, `build/`, egg metadata, and Python caches recursively, including caches in `.venv`. Review those targets before using it. Inspect the wheel and source distribution before publishing, especially for local files that are not meant to ship.
 
 4. **Commit and tag**:
    ```bash
-   git add pyproject.toml CHANGELOG.md
+   git add pyproject.toml uv.lock CHANGELOG.md
    git commit -m "release: vx.y.z - description"
    git tag vx.y.z -m "Release vx.y.z: description"
    ```
 
-5. **Push to GitHub**:
+5. **Push the intended release branch and tag** to its configured remote (the commands below assume `origin` and `main`; check `git remote -v` and `git branch -vv` first):
    ```bash
    git push origin main
    git push origin vx.y.z
    ```
 
-6. **Publish to PyPI**:
+6. **Publish to PyPI**, only with release authorization and credentials for `reverse-api-engineer`:
    ```bash
-   source .env  # or export UV_PUBLISH_TOKEN manually
-   uv publish
+   # Supply UV_PUBLISH_TOKEN through your environment; never commit it.
+   uv publish dist/reverse_api_engineer-x.y.z*
    ```
 
 ## Important Notes
 
 - **Never manually edit** `src/reverse_api/__init__.py` to change the version
 - The version is automatically read from the installed package metadata
-- During development (before install), the version shows as `0.0.0.dev`
+- Without installed distribution metadata, the version falls back to `0.0.0.dev`
 - After installation, it shows the correct version from `pyproject.toml`
